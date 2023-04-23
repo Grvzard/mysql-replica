@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import final
+from typing import final, Tuple
 from pathlib import Path
 
 from pymysqlreplication.gtid import Gtid
@@ -13,31 +13,29 @@ class GtidLogger(ABC):
         ...
 
     @abstractmethod
-    def read(self) -> str:
+    def read(self) -> Tuple[str, str]:
         ...
 
     @abstractmethod
-    def write(self, gtid_executed: str) -> None:
+    def write(self, gtid_info: Tuple[str, str]) -> None:
         ...
 
     @final
-    def get_executed(self) -> str:
-        self._executed = Gtid(self.read())
-        return str(self._executed)
+    def get_next(self) -> str:
+        self.gtid_executed, self.gtid_next = map(Gtid, self.read())
+        return str(self.gtid_executed + self.gtid_next)
 
     @final
     def set_next(self, gtid: str) -> bool:
-        self._next = Gtid(gtid)
+        self.gtid_executed += self.gtid_next
 
-        if self._next in self._executed:
+        gtid_next = Gtid(gtid)
+        if gtid_next in self.gtid_executed:
             return False
 
+        self.gtid_next = gtid_next
+        self.write(str(self.gtid_executed), str(self.gtid_next))
         return True
-
-    @final
-    def set_executed(self) -> None:
-        self._executed += self._next
-        self.write(str(self._executed))
 
 
 class GtidFile(GtidLogger):
@@ -52,12 +50,12 @@ class GtidFile(GtidLogger):
     def __exit__(self, **exec_info):
         self.fp.close()
 
-    def read(self) -> str:
+    def read(self):
         self.fp.seek(0)
-        return self.fp.readline()
+        return self.fp.readline().split(' ')
 
-    def write(self, gtid_executed: str) -> None:
+    def write(self, gtid_executed: str, gtid_next: str):
         self.fp.seek(0)
-        self.fp.write(gtid_executed)
+        self.fp.write(' '.join((gtid_executed, gtid_next)))
         self.fp.truncate()
         self.fp.flush()
