@@ -31,7 +31,7 @@ class Replica:
 
     async def run(self) -> None:
         try:
-            _ = self.gtid_logger.get_next()
+            _ = self.gtid_logger.get_executed()
         except Exception as e:
             logger.error(e)
             return
@@ -39,7 +39,7 @@ class Replica:
         stream = BinLogStreamReader(
             connection_settings=self.connection_settings,
             only_schemas=self.only_schemas,
-            only_events=[WriteRowsEvent, GtidEvent],
+            # only_events=[WriteRowsEvent, GtidEvent],
             # auto_position = gtid,
             server_id=randint(100, 100000000),
             blocking=False,
@@ -47,7 +47,7 @@ class Replica:
         )
 
         while self.working:
-            stream.auto_position = self.gtid_logger.get_next()
+            stream.auto_position = self.gtid_logger.get_executed()
             await self._read_stream(stream)
 
             await asyncio.sleep(4)
@@ -70,3 +70,4 @@ class Replica:
                     # schema | table | rows
                     logger.debug(f"{e.schema} + {time.asctime(time.localtime(e.timestamp))}")
                     await self.db.put(e)
+                self.gtid_logger.set_executed()
