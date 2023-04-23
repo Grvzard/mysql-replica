@@ -17,7 +17,7 @@ class GtidLogger(ABC):
         ...
 
     @abstractmethod
-    def write(self, gtid_info: Tuple[str, str]) -> None:
+    def write(self, gtid_executed: str, gtid_next: str) -> None:
         ...
 
     @final
