@@ -60,6 +60,8 @@ class Replica:
         do_next = False
         while e := stream.fetchone():
             if isinstance(e, GtidEvent):
+                if not self.working:
+                    break
                 logger.info(e)
                 do_next = self.gtid_logger.set_next(e.gtid)
             elif not do_next:
