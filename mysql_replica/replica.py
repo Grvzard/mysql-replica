@@ -46,6 +46,8 @@ class Replica:
             slave_heartbeat=60,
         )
 
+        await self.db.open()
+
         while self.working:
             stream.auto_position = self.gtid_logger.get_next()
             await self._read_stream(stream)
@@ -58,17 +60,17 @@ class Replica:
 
     async def _read_stream(self, stream):
         do_next = False
-        while e := stream.fetchone():
-            if isinstance(e, GtidEvent):
+        while event := stream.fetchone():
+            if isinstance(event, GtidEvent):
                 if not self.working:
                     break
-                logger.info(e)
-                do_next = self.gtid_logger.set_next(e.gtid)
+                logger.info(event)
+                do_next = self.gtid_logger.set_next(event.gtid)
             elif not do_next:
                 continue
             else:
                 do_next = False
-                if e.__class__ in (WriteRowsEvent,):
-                    # schema | table | rows
-                    logger.debug(f"{e.schema} + {time.asctime(time.localtime(e.timestamp))}")
-                    await self.db.put(e)
+                if event.__class__ in (WriteRowsEvent,):
+                    event_time = time.asctime(time.localtime(event.timestamp))
+                    logger.debug(f"{event.schema} > {event_time}")
+                    await self.db.put(event)
