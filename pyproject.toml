@@ -3,11 +3,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mysql_replica"
+name = "mysql-replica"
 dynamic = ["version"]
 requires-python = ">=3.8"
 dependencies = [
-    "mysql-replication"
+    "asyncmy >= 0.2.8rc1"
 ]
 
 [tool.hatch.version]
