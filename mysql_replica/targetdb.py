@@ -13,3 +13,6 @@ class TargetDb(ABC):
 
     async def close(self):
         ...
+
+    async def flush(self):
+        ...

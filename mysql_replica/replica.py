@@ -55,8 +55,9 @@ class Replica:
         try:
             while self.working:
                 await self._read_stream(stream)
+                _tasks = [asyncio.sleep(4), self.db.flush()]
+                await asyncio.gather(*_tasks)
 
-                await asyncio.sleep(4)
         finally:
             logger.info("closing mysql connections...")
             await conn.ensure_closed()
@@ -80,8 +81,17 @@ class Replica:
             #         await targetdb.put(event)
 
             event_time = time.asctime(time.localtime(event.timestamp))
-            logger.debug(f"{event.schema} > {event_time}")
+            logger.info(f"{event.schema} > {event_time}")
             await self.db.put(event)
 
-            logger.debug(f"filepos: {stream._master_log_file}, {stream._master_log_position}")
-            self.filepos_logger.set_next(stream._master_log_file, stream._master_log_position)
+            try:
+                logger.debug(f"filepos: {stream._master_log_file}, {stream._master_log_position}")
+                self.filepos_logger.set_next(stream._master_log_file, stream._master_log_position)
+            except Exception as exc:
+                logger.error(
+                    "filepos_logger set failed at ",
+                    f"{stream._master_log_file}, {stream._master_log_position}: ",
+                    f"{exc}",
+                )
+                self.stop()
+                break
