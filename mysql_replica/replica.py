@@ -21,13 +21,13 @@ class Replica:
         connection_settings: Dict,
         only_schemas: List[str],
         filepos_logger: FileposLogger,
-        targetdb: TargetDb,
+        targetdbs: List[TargetDb],
     ):
         self.connection_settings = connection_settings
         self.only_schemas = only_schemas
         self.filepos_logger = filepos_logger
         self.working = True
-        self.db = targetdb
+        self._targetdbs = targetdbs
 
     async def run(self) -> None:
         try:
@@ -51,11 +51,12 @@ class Replica:
             slave_heartbeat=60,
         )
 
-        await self.db.open()
+        [await db.open() for db in self._targetdbs]
         try:
             while self.working:
                 await self._read_stream(stream)
-                _tasks = [asyncio.sleep(4), self.db.flush()]
+                _tasks = [db.flush() for db in self._targetdbs]
+                _tasks.append(asyncio.sleep(4))
                 await asyncio.gather(*_tasks)
 
         finally:
@@ -63,7 +64,7 @@ class Replica:
             await conn.ensure_closed()
             await ctl_conn.ensure_closed()
             logger.info("closing targetdb...")
-            await self.db.close()
+            [await db.close() for db in self._targetdbs]
             logger.info("replica stoped")
 
     def stop(self):
@@ -74,15 +75,9 @@ class Replica:
             if not self.working:
                 break
 
-            # TODO: support multiple targetdb for different schemas
-            # if event.schema in self.only_schemas:
-            #     targetdbs = self._targetdbs[event.schema]
-            #     for targetdb in targetdbs:
-            #         await targetdb.put(event)
-
             event_time = time.asctime(time.localtime(event.timestamp))
             logger.info(f"{event.schema} > {event_time}")
-            await self.db.put(event)
+            [await db.put(event) for db in self._targetdbs]
 
             try:
                 logger.debug(f"filepos: {stream._master_log_file}, {stream._master_log_position}")
