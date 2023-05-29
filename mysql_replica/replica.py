@@ -6,9 +6,8 @@ from random import randint
 from typing import List, Dict
 
 from pymysqlreplication import BinLogStreamReader
-
-# from pymysqlreplication.event import GtidEvent
 from pymysqlreplication.row_event import WriteRowsEvent
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from .filepos_logger import FileposLogger
 from .targetdb import TargetDb
@@ -69,6 +68,7 @@ class Replica:
     def stop(self):
         self.working = False
 
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
     async def _read_stream(self, stream):
         while event := stream.fetchone():
             if not self.working:
