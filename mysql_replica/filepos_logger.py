@@ -3,10 +3,10 @@ from typing import Tuple
 
 
 class FileposLogger:
-    def __init__(self, filename: str):
-        self._filename = filename
-        Path(self._filename).touch(exist_ok=True)
-        self._fp = open(self._filename, "r+")
+    def __init__(self, fpath: Path):
+        self._fpath = fpath
+        self._fpath.touch(exist_ok=True)
+        self._fp = open(self._fpath, "r+")
         self.filepos = ("", 0)
 
     def read(self) -> Tuple[str, str]:
@@ -23,6 +23,7 @@ class FileposLogger:
         self._fp.seek(0)
         self._fp.write(" ".join(str(_) for _ in filepos))
         self._fp.truncate()
+        self._fp.flush()
 
     def get_next(self) -> Tuple[str, int]:
         file, pos = self.read()

@@ -7,7 +7,7 @@ name = "mysql-replica"
 dynamic = ["version"]
 requires-python = ">=3.8"
 dependencies = [
-    "asyncmy >= 0.2.8rc1"
+    "mysql-replication"
 ]
 
 [tool.hatch.version]

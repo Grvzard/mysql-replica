@@ -1,12 +1,14 @@
+from pathlib import Path
 import time
 import logging
 import asyncio
 from random import randint
 from typing import List, Dict
 
-from asyncmy import connect
-from asyncmy.replication import BinLogStream
-from asyncmy.replication.row_events import WriteRowsEvent
+from pymysqlreplication import BinLogStreamReader
+
+# from pymysqlreplication.event import GtidEvent
+from pymysqlreplication.row_event import WriteRowsEvent
 
 from .filepos_logger import FileposLogger
 from .targetdb import TargetDb
@@ -20,32 +22,31 @@ class Replica:
         self,
         connection_settings: Dict,
         only_schemas: List[str],
-        filepos_logger: FileposLogger,
+        filepos_fpath: str,
         targetdbs: List[TargetDb],
     ):
         self.connection_settings = connection_settings
         self.only_schemas = only_schemas
-        self.filepos_logger = filepos_logger
+        self.filepos_fpath = Path(filepos_fpath)
         self.working = True
         self._targetdbs = targetdbs
 
     async def run(self) -> None:
+        self.filepos_logger = FileposLogger(self.filepos_fpath)
+
         try:
             file, pos = self.filepos_logger.get_next()
         except Exception as e:
             logger.error(e)
             return
 
-        conn = await connect(**self.connection_settings)
-        ctl_conn = await connect(**self.connection_settings)
-        stream = BinLogStream(
-            connection=conn,
-            ctl_connection=ctl_conn,
+        stream = BinLogStreamReader(
+            connection_settings=self.connection_settings,
             server_id=randint(100, 100000000),
             only_schemas=self.only_schemas,
             only_events=[WriteRowsEvent],
-            master_log_file=file,
-            master_log_position=pos,
+            log_file=file,
+            log_pos=pos,
             resume_stream=True,
             blocking=False,
             slave_heartbeat=60,
@@ -60,9 +61,7 @@ class Replica:
                 await asyncio.gather(*_tasks)
 
         finally:
-            logger.info("closing mysql connections...")
-            await conn.ensure_closed()
-            await ctl_conn.ensure_closed()
+            self.filepos_logger.close()
             logger.info("closing targetdb...")
             [await db.close() for db in self._targetdbs]
             logger.info("replica stoped")
@@ -71,7 +70,7 @@ class Replica:
         self.working = False
 
     async def _read_stream(self, stream):
-        async for event in stream:
+        while event := stream.fetchone():
             if not self.working:
                 break
 
@@ -80,12 +79,12 @@ class Replica:
             [await db.put(event) for db in self._targetdbs]
 
             try:
-                logger.debug(f"filepos: {stream._master_log_file}, {stream._master_log_position}")
-                self.filepos_logger.set_next(stream._master_log_file, stream._master_log_position)
+                logger.debug(f"filepos: {stream.log_file}, {stream.log_pos}")
+                self.filepos_logger.set_next(stream.log_file, stream.log_pos)
             except Exception as exc:
                 logger.error(
                     "filepos_logger set failed at ",
-                    f"{stream._master_log_file}, {stream._master_log_position}: ",
+                    f"{stream.log_file}, {stream.log_pos}: ",
                     f"{exc}",
                 )
                 self.stop()
