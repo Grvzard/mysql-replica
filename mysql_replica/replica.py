@@ -78,6 +78,8 @@ class Replica:
                 logger.error(f"fetchone failed: {exc}")
                 stream.close()
                 break
+            if event is None:
+                break
 
             event_time = time.asctime(time.localtime(event.timestamp))
             logger.info(f"{event.schema} > {event_time}")
