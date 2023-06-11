@@ -72,8 +72,11 @@ class Replica:
         while True:
             if not self.working:
                 break
-            event = Retrying(stop=stop_after_delay(10)).wraps(stream.fetchone)()
-            if event is None:
+            try:
+                event = Retrying(stop=stop_after_delay(10)).wraps(stream.fetchone)()
+            except Exception as exc:
+                logger.error(f"fetchone failed: {exc}")
+                stream.close()
                 break
 
             event_time = time.asctime(time.localtime(event.timestamp))
